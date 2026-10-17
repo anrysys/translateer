@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6fd0fb"/>
+      <stop offset="1" stop-color="#2b9be3"/>
+    </linearGradient>
+    <linearGradient id="orange" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffa53d"/>
+      <stop offset="1" stop-color="#f57a0c"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Голубая подложка -->
+  <rect x="8" y="10" width="112" height="112" rx="26" fill="#1a6fae" opacity="0.35"/>
+  <rect x="8" y="8" width="112" height="112" rx="26" fill="url(#bg)"/>
+
+  <!-- Оранжевое облачко с белой «A» -->
+  <path d="M30 66 L25 86 L48 66 Z" fill="#f57a0c"/>
+  <rect x="17" y="19" width="62" height="51" rx="14" fill="url(#orange)"/>
+  <path d="M30 53 L39.5 28 L49 53 M33.5 45 H45.5" fill="none" stroke="#fff"
+        stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Белое облачко с голубой «Я» -->
+  <g opacity="0.18" transform="translate(0 2.5)">
+    <rect x="49" y="51" width="62" height="51" rx="14" fill="#003a66"/>
+    <path d="M98 98 L104 116 L82 98 Z" fill="#003a66"/>
+  </g>
+  <path d="M98 98 L104 116 L82 98 Z" fill="#fff"/>
+  <rect x="49" y="51" width="62" height="51" rx="14" fill="#fff"/>
+  <path d="M91 91 V64 H81 A7.5 7.5 0 0 0 81 79 H91 M84.5 79 L73 91" fill="none"
+        stroke="#1f8ad4" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

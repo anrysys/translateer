@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.anrysys.Translateer</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+
+  <name>Translateer</name>
+  <summary>Translate selected text between English, Russian and Ukrainian</summary>
+  <summary xml:lang="ru">Перевод выделенного текста между русским, английским и украинским</summary>
+  <summary xml:lang="uk">Переклад виділеного тексту між українською, англійською та російською</summary>
+
+  <description>
+    <p>Translateer translates text between English, Russian and Ukrainian. Select text in any application and press Ctrl+Alt+E to see its translation.</p>
+    <p xml:lang="ru">Translateer переводит текст между русским, английским и украинским. Выделите текст в любой программе и нажмите Ctrl+Alt+E — появится перевод.</p>
+    <p xml:lang="uk">Translateer перекладає текст між українською, англійською та російською. Виділіть текст у будь-якій програмі й натисніть Ctrl+Alt+E — з'явиться переклад.</p>
+    <ul>
+      <li>Six directions between English, Russian and Ukrainian</li>
+      <li xml:lang="ru">Шесть направлений между русским, английским и украинским</li>
+      <li xml:lang="uk">Шість напрямків між українською, англійською та російською</li>
+      <li>Back-translate the result with one button to check it</li>
+      <li xml:lang="ru">Обратный перевод результата одной кнопкой</li>
+      <li xml:lang="uk">Зворотний переклад результату однією кнопкою</li>
+      <li>Open it from the app menu to type text by hand</li>
+      <li xml:lang="ru">Запуск из меню приложений — для ввода текста вручную</li>
+      <li xml:lang="uk">Запуск із меню застосунків — для введення тексту вручну</li>
+    </ul>
+    <p>The shortcut is assigned in GNOME on first launch from the app menu, if Ctrl+Alt+E is free. Translation uses translate-shell and needs an internet connection.</p>
+    <p xml:lang="ru">Горячая клавиша назначается в GNOME при первом запуске из меню, если Ctrl+Alt+E свободно. Перевод выполняет translate-shell, нужен интернет.</p>
+    <p xml:lang="uk">Гаряча клавіша призначається в GNOME під час першого запуску з меню, якщо Ctrl+Alt+E вільне. Переклад виконує translate-shell, потрібен інтернет.</p>
+  </description>
+
+  <url type="homepage">https://github.com/anrysys/translateer</url>
+  <url type="bugtracker">https://github.com/anrysys/translateer/issues</url>
+
+  <launchable type="desktop-id">translateer.desktop</launchable>
+  <provides>
+    <binary>translateer</binary>
+  </provides>
+
+  <developer id="io.github.anrysys">
+    <name>andriiakishyn</name>
+  </developer>
+  <update_contact>andriiakishyn@gmail.com</update_contact>
+
+  <content_rating type="oars-1.1"/>
+
+  <releases>
+    <release version="1.0.0" date="2026-10-17">
+      <description>
+        <p>First release.</p>
+      </description>
+    </release>
+  </releases>
+</component>

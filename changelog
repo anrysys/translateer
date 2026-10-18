@@ -1,3 +1,20 @@
+translateer (1.1.0) unstable; urgency=medium
+
+  * Ask the translation direction once for each language of the text and
+    remember it; Ctrl+Alt+Shift+E and the "Other direction" button pick
+    another one.
+  * Assign Ctrl+Alt+Shift+E on first launch, only if it is free.
+  * Trim texts longer than 2000 characters with a warning instead of
+    returning an empty translation.
+  * Keep a single translation window: a new translation appears in the
+    window that is already open, keeping its place and size; the size is
+    remembered after closing. The window is now a GTK 4 application.
+  * Offer "Retry" instead of back-translating an error message.
+  * Fix detection of Russian text: grep rejected the [А-Я] range in the
+    C.UTF-8 locale.
+
+ -- andriiakishyn <andriiakishyn@gmail.com>  Sun, 18 Oct 2026 13:20:00 +0300
+
 translateer (1.0.0) unstable; urgency=medium
 
   * Initial release.

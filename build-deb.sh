@@ -3,12 +3,13 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-version=1.0.0
+version=1.1.0
 root=build/translateer_${version}_all
 share=$root/usr/share
 
 rm -rf "$root"
 install -Dm755 translateer "$root/usr/bin/translateer"
+install -Dm755 translateer-window "$root/usr/libexec/translateer/translateer-window"
 install -Dm644 data/translateer.desktop "$share/applications/translateer.desktop"
 install -Dm644 data/io.github.anrysys.Translateer.metainfo.xml "$share/metainfo/io.github.anrysys.Translateer.metainfo.xml"
 install -Dm644 data/translateer.svg "$share/icons/hicolor/scalable/apps/translateer.svg"
@@ -28,18 +29,19 @@ Version: $version
 Architecture: all
 Maintainer: andriiakishyn <andriiakishyn@gmail.com>
 Installed-Size: $installed_size
-Depends: translate-shell, wl-clipboard, zenity, libnotify-bin
+Depends: translate-shell, wl-clipboard, zenity, libnotify-bin, gawk, procps, python3-gi, gir1.2-gtk-4.0, gir1.2-adw-1
 Section: utils
 Homepage: https://github.com/anrysys/translateer
 Priority: optional
 Description: translate selected text between English, Russian and Ukrainian
  Select text in any application and press Ctrl+Alt+E to see its translation.
- Six directions between English, Russian and Ukrainian are available, and the
- result can be translated back with one button to check it. Launch it from the
- app menu to type text by hand.
+ Six directions between English, Russian and Ukrainian are available. The
+ direction is asked once for each language of the text and remembered;
+ Ctrl+Alt+Shift+E picks another one. The result can be translated back with
+ one button to check it. Launch it from the app menu to type text by hand.
  .
- The shortcut is assigned in GNOME on first launch from the app menu, if
- Ctrl+Alt+E is free. Translation uses translate-shell and needs an internet
+ The shortcuts are assigned in GNOME on first launch from the app menu, only
+ if they are free. Translation uses translate-shell and needs an internet
  connection.
 CONTROL
 

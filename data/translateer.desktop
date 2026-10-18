@@ -13,3 +13,4 @@ Terminal=false
 Categories=Utility;TextTools;
 Keywords=translate;translator;translation;dictionary;переводчик;перевод;перекладач;переклад;
 StartupNotify=false
+StartupWMClass=io.github.anrysys.Translateer

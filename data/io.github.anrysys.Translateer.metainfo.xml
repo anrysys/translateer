@@ -17,6 +17,15 @@
       <li>Six directions between English, Russian and Ukrainian</li>
       <li xml:lang="ru">Шесть направлений между русским, английским и украинским</li>
       <li xml:lang="uk">Шість напрямків між українською, англійською та російською</li>
+      <li>The direction is asked once for each language and remembered</li>
+      <li xml:lang="ru">Направление спрашивается один раз для каждого языка и запоминается</li>
+      <li xml:lang="uk">Напрямок запитується один раз для кожної мови й запам'ятовується</li>
+      <li>Ctrl+Alt+Shift+E picks another direction when needed</li>
+      <li xml:lang="ru">Ctrl+Alt+Shift+E — выбрать другое направление, когда нужно</li>
+      <li xml:lang="uk">Ctrl+Alt+Shift+E — вибрати інший напрямок, коли потрібно</li>
+      <li>A single translation window that keeps its place and size</li>
+      <li xml:lang="ru">Одно окно перевода, которое не меняет место и размер</li>
+      <li xml:lang="uk">Одне вікно перекладу, яке не змінює місце й розмір</li>
       <li>Back-translate the result with one button to check it</li>
       <li xml:lang="ru">Обратный перевод результата одной кнопкой</li>
       <li xml:lang="uk">Зворотний переклад результату однією кнопкою</li>
@@ -24,9 +33,9 @@
       <li xml:lang="ru">Запуск из меню приложений — для ввода текста вручную</li>
       <li xml:lang="uk">Запуск із меню застосунків — для введення тексту вручну</li>
     </ul>
-    <p>The shortcut is assigned in GNOME on first launch from the app menu, if Ctrl+Alt+E is free. Translation uses translate-shell and needs an internet connection.</p>
-    <p xml:lang="ru">Горячая клавиша назначается в GNOME при первом запуске из меню, если Ctrl+Alt+E свободно. Перевод выполняет translate-shell, нужен интернет.</p>
-    <p xml:lang="uk">Гаряча клавіша призначається в GNOME під час першого запуску з меню, якщо Ctrl+Alt+E вільне. Переклад виконує translate-shell, потрібен інтернет.</p>
+    <p>The shortcuts are assigned in GNOME on first launch from the app menu, only if they are free. Translation uses translate-shell and needs an internet connection.</p>
+    <p xml:lang="ru">Горячие клавиши назначаются в GNOME при первом запуске из меню, только если они свободны. Перевод выполняет translate-shell, нужен интернет.</p>
+    <p xml:lang="uk">Гарячі клавіші призначаються в GNOME під час першого запуску з меню, лише якщо вони вільні. Переклад виконує translate-shell, потрібен інтернет.</p>
   </description>
 
   <url type="homepage">https://github.com/anrysys/translateer</url>
@@ -45,6 +54,11 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="1.1.0" date="2026-10-18">
+      <description>
+        <p>The translation direction is asked once for each language of the text and remembered. Ctrl+Alt+Shift+E picks another direction. New translations appear in the window that is already open, keeping its place and size. Long texts are trimmed with a warning, a failed translation can be retried, and Russian text is detected correctly again.</p>
+      </description>
+    </release>
     <release version="1.0.0" date="2026-10-17">
       <description>
         <p>First release.</p>

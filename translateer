@@ -2,127 +2,230 @@
 #
 # Translateer — переводит текст между русским, английским и украинским.
 #
-#   translateer          перевести выделенный текст (так её вызывает горячая клавиша)
-#   translateer --input  ввести текст вручную (так она запускается из меню);
-#                        при первом запуске назначает в GNOME горячую клавишу Ctrl+Alt+E
+#   translateer           перевести выделенный текст (горячая клавиша Ctrl+Alt+E)
+#   translateer --choose  то же, но сначала выбрать направление (Ctrl+Alt+Shift+E)
+#   translateer --input   ввести текст вручную (так программа запускается из меню);
+#                         при первом запуске назначает горячие клавиши в GNOME
+#
+# Направление перевода спрашивается один раз для каждого языка текста и запоминается.
 
 declare -A name=([ru]="Русский" [en]="English" [uk]="Українська")
+declare -A text_in=([ru]="на русском" [en]="на английском" [uk]="на украинском")
+declare -A default_target=([ru]=en [en]=ru [uk]=ru)
+max_chars=2000   # на более длинном тексте translate-shell молча возвращает пустой перевод
+
 config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/translateer"
-last_file="$config_dir/last-direction"
-hotkey_file="$config_dir/hotkey-configured"
+targets_file="$config_dir/targets"
+hotkeys_file="$config_dir/hotkeys-configured"
+pid_file="${XDG_RUNTIME_DIR:-/tmp}/translateer-$UID.pid"
 
 media_keys=org.gnome.settings-daemon.plugins.media-keys
-keybinding_path=/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/translateer/
+keybindings_dir=/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings
 
-# Один раз пытается назначить Ctrl+Alt+E в GNOME, если это сочетание свободно
-setup_hotkey() {
-    [ -e "$hotkey_file" ] && return
-    mkdir -p "$config_dir" && touch "$hotkey_file"
+# Горячие клавиши: путь в dconf | сочетание | подпись | команда | что делает
+hotkeys=(
+    "translateer|<Control><Alt>e|Ctrl+Alt+E|translateer|перевести выделенный текст"
+    "translateer-choose|<Control><Alt><Shift>e|Ctrl+Alt+Shift+E|translateer --choose|перевести с выбором направления"
+)
 
-    local manual="Назначьте сочетание клавиш вручную на команду <b>translateer</b>"
-    if ! gsettings list-schemas 2>/dev/null | grep -qx "$media_keys"; then
-        zenity --info --title="Translateer" --width=420 \
-            --text="$manual в настройках клавиатуры вашего рабочего стола."
-        return
-    fi
-
-    local list
-    list=$(gsettings get $media_keys custom-keybindings)
-    [[ $list == *"$keybinding_path"* ]] && return
-
-    if { gsettings list-recursively; dconf dump /; } 2>/dev/null |
-            grep -qiE "<(control|primary|ctrl)><alt>e'|<alt><(control|primary|ctrl)>e'"; then
-        zenity --info --title="Translateer" --width=420 \
-            --text="Сочетание Ctrl+Alt+E уже занято.\n\n$manual:\nНастройки → Клавиатура → Комбинации клавиш → Особые комбинации."
-        return
-    fi
-
-    if [[ $list == "@as []" || $list == "[]" ]]; then
-        list="['$keybinding_path']"
-    else
-        list="${list%]}, '$keybinding_path']"
-    fi
-    local s=$media_keys.custom-keybinding:$keybinding_path
-    gsettings set $s name 'Translateer'
-    gsettings set $s command 'translateer'
-    gsettings set $s binding '<Control><Alt>e'
-    gsettings set $media_keys custom-keybindings "$list"
-
-    zenity --info --title="Translateer" --width=420 \
-        --text="Горячая клавиша <b>Ctrl+Alt+E</b> назначена.\n\nВыделите текст в любой программе и нажмите её — появится перевод."
+# Занято ли сочетание где-нибудь в GNOME; порядок модификаторов и регистр не важны
+hotkey_taken() {
+    { gsettings list-recursively; dconf dump /; } 2>/dev/null | gawk -v want="$1" '
+        function canon(s,   key, mods, n, i, out) {
+            s = tolower(s)
+            gsub(/<(primary|ctrl)>/, "<control>", s)
+            key = s
+            sub(/.*>/, "", key)
+            while (match(s, /<[a-z0-9_]+>/)) {
+                mods[++n] = substr(s, RSTART + 1, RLENGTH - 2)
+                s = substr(s, RSTART + RLENGTH)
+            }
+            asort(mods)
+            for (i = 1; i <= n; i++) out = out "<" mods[i] ">"
+            return out key
+        }
+        BEGIN { want = canon(want) }
+        {
+            while (match($0, /(<[A-Za-z0-9_]+>)+[A-Za-z0-9_]+/)) {
+                accel = substr($0, RSTART, RLENGTH)
+                $0 = substr($0, RSTART + RLENGTH)   # до canon(): она сама вызывает match()
+                if (canon(accel) == want) found = 1
+            }
+        }
+        END { exit !found }'
 }
 
-# Меню выбора направления; $1 — направление, отмеченное заранее
+# Один раз назначает горячие клавиши в GNOME — только свободные сочетания
+setup_hotkeys() {
+    [ -e "$hotkeys_file" ] && return
+    mkdir -p "$config_dir" && touch "$hotkeys_file"
+
+    if ! gsettings list-schemas 2>/dev/null | grep -qx "$media_keys"; then
+        zenity --info --title="Translateer" --width=460 \
+            --text="Назначьте горячие клавиши в настройках клавиатуры вашего рабочего стола:\n\n<b>translateer</b> — перевести выделенный текст\n<b>translateer --choose</b> — перевести с выбором направления"
+        return
+    fi
+
+    local list entry id binding label command what path s msg
+    local assigned=() busy=()
+    list=$(gsettings get $media_keys custom-keybindings)
+    for entry in "${hotkeys[@]}"; do
+        IFS='|' read -r id binding label command what <<< "$entry"
+        path=$keybindings_dir/$id/
+        [[ $list == *"$path"* ]] && continue
+        if hotkey_taken "$binding"; then
+            busy+=("<b>$label</b> — $what (команда <b>$command</b>)")
+            continue
+        fi
+        s=$media_keys.custom-keybinding:$path
+        gsettings set $s name "Translateer: $what"
+        gsettings set $s command "$command"
+        gsettings set $s binding "$binding"
+        if [[ $list == "@as []" || $list == "[]" ]]; then
+            list="['$path']"
+        else
+            list="${list%]}, '$path']"
+        fi
+        assigned+=("<b>$label</b> — $what")
+    done
+    gsettings set $media_keys custom-keybindings "$list"
+
+    [ ${#assigned[@]} -eq 0 ] && [ ${#busy[@]} -eq 0 ] && return
+    [ ${#assigned[@]} -gt 0 ] && msg+="Горячие клавиши назначены:\n$(printf '%s\n' "${assigned[@]}")\n\n"
+    [ ${#busy[@]} -gt 0 ] && msg+="Эти сочетания уже заняты, поэтому не назначены:\n$(printf '%s\n' "${busy[@]}")\nНазначьте другие: Настройки → Клавиатура → Комбинации клавиш → Особые комбинации.\n\n"
+    msg+="Выделите текст в любой программе и нажмите горячую клавишу — появится перевод."
+    zenity --info --title="Translateer" --width=480 --text="$msg"
+}
+
+# Подпись сочетания для «перевода с выбором», если оно назначено
+choose_hotkey_label() {
+    [[ $(gsettings get $media_keys custom-keybindings 2>/dev/null) == *"$keybindings_dir/translateer-choose/"* ]] || return
+    gsettings get $media_keys.custom-keybinding:$keybindings_dir/translateer-choose/ binding 2>/dev/null |
+        sed -E "s/'//g; s/<(Control|Primary|Ctrl)>/Ctrl+/I; s/<Alt>/Alt+/I; s/<Shift>/Shift+/I; s/<Super>/Super+/I; s/[a-z]$/\U&/; s/</\&lt;/g; s/>/\&gt;/g"
+}
+
+# На какой язык переводить текст на каждом языке: строки вида ru=en
+declare -A target=()
+if [ -r "$targets_file" ]; then
+    while IFS='=' read -r from to; do
+        # Испорченные строки пропускаем — тогда направление просто спросится заново
+        [[ $from =~ ^(ru|en|uk)$ && $to =~ ^(ru|en|uk)$ && $from != "$to" ]] && target[$from]=$to
+    done < "$targets_file"
+fi
+
+# Запоминает выбор; файл заменяется целиком, чтобы не остаться полузаписанным
+save_target() {  # $1 — направление вида ru:en
+    target[${1%:*}]=${1#*:}
+    local l
+    mkdir -p "$config_dir" &&
+        for l in "${!target[@]}"; do echo "$l=${target[$l]}"; done > "$targets_file.tmp" &&
+        mv "$targets_file.tmp" "$targets_file"
+}
+
+# Процесс и все его потомки
+process_tree() {
+    local child
+    echo "$1"
+    for child in $(pgrep -P "$1"); do process_tree "$child"; done
+}
+
+# Окно на экране всегда одно: закрывает диалоги предыдущего запуска и запоминает текущий.
+# Предыдущий запуск сначала замораживается, чтобы он не успел открыть новый диалог.
+# Окно перевода не трогаем: после exec в этом PID уже python, а не bash
+take_over() {
+    local old cmd
+    exec 9> "$pid_file.lock"
+    flock 9
+    old=$(cat "$pid_file" 2>/dev/null)
+    [[ $old =~ ^[0-9]+$ && $old != "$$" ]] && cmd=$(tr '\0' ' ' < "/proc/$old/cmdline" 2>/dev/null)
+    if [[ $cmd == */bash\ *translateer* ]]; then
+        kill -STOP "$old" 2>/dev/null
+        kill $(process_tree "$old") 2>/dev/null
+        kill -CONT "$old" 2>/dev/null
+    fi
+    echo $$ > "$pid_file"
+    exec 9>&-
+}
+
+# Буквы перечислены без диапазонов: [А-Я] в локали C.UTF-8 grep считает ошибкой
+has() { printf '%s' "$text" | LC_ALL=C.UTF-8 grep -q "$1"; }
+
+# Язык текста по буквам. Если буквы общие для русского и украинского,
+# берём тот из них, для которого направление уже выбрано
+detect() {
+    if has '[ІіЇїЄєҐґ]'; then
+        echo uk
+    elif has '[ЫыЭэЪъЁё]'; then
+        echo ru
+    elif has '[АБВГДЕЖЗИЙКЛМНОПРСТУФХЦЧШЩЬЮЯабвгдежзийклмнопрстуфхцчшщьюя]'; then
+        if [ -n "${target[uk]}" ] && [ -z "${target[ru]}" ]; then echo uk; else echo ru; fi
+    else
+        echo en
+    fi
+}
+
+# Меню выбора направления; $1 — направление, отмеченное заранее, $2 — пояснение
 choose() {
     local rows=() d
     for d in ru:en en:ru ru:uk uk:ru en:uk uk:en; do
         rows+=("$([ "$d" = "$1" ] && echo TRUE || echo FALSE)" "$d" "${name[${d%:*}]} → ${name[${d#*:}]}")
     done
-    zenity --list --radiolist --title="Translateer" --text="Направление перевода:" \
+    zenity --list --radiolist --title="Translateer" --text="$2" \
         --column="" --column="" --column="Направление" --hide-column=2 --print-column=2 \
-        --hide-header --width=320 --height=340 "${rows[@]}"
+        --hide-header --width=440 --height=420 "${rows[@]}"
 }
 
-case $1 in
-    "")
+mode=$1
+case $mode in
+    ""|--choose)
         text=$(wl-paste --primary --no-newline 2>/dev/null)
         [ -z "$text" ] && text=$(wl-paste --no-newline 2>/dev/null)
         ;;
     --input)
-        setup_hotkey
+        take_over
+        setup_hotkeys
         text=$(zenity --text-info --editable --title="Translateer — введите текст" \
             --width=600 --height=300 --ok-label="Перевести" --cancel-label="Закрыть" < /dev/null) || exit 0
         ;;
     *)
-        echo "Использование: translateer [--input]" >&2
+        echo "Использование: translateer [--choose | --input]" >&2
         exit 2
         ;;
 esac
 
-if [ -z "$text" ]; then
-    notify-send -i translateer "Translateer" "Нет текста для перевода"
+if [[ -z ${text//[[:space:]]/} ]]; then
+    [ "$mode" = --input ] && hint="введите текст" || hint="сначала выделите текст"
+    notify-send -i translateer "Translateer" "Нет текста для перевода — $hint"
     exit 1
 fi
+# Старое окно закрываем только теперь: выделенный в нём текст уже прочитан
+[ "$mode" != --input ] && take_over
 
-# Угадываем язык текста, чтобы заранее отметить направление в меню
-if printf '%s' "$text" | LC_ALL=C.UTF-8 grep -q '[ІіЇїЄєҐґ]'; then
-    src=uk
-elif printf '%s' "$text" | LC_ALL=C.UTF-8 grep -q '[А-Яа-яЁё]'; then
-    src=ru
-else
-    src=en
+notice=""
+if [ ${#text} -gt $max_chars ]; then
+    notice="⚠ В тексте ${#text} символов, а за раз переводится не больше $max_chars — переведено только начало. Чтобы перевести остальное, выделите следующий фрагмент."
+    text=${text:0:max_chars}
+    [[ $text == *[[:space:]]* ]] && text=${text%[[:space:]]*}   # не обрываем слово
 fi
 
-# Если в прошлый раз переводили с этого же языка — предлагаем то же направление
-last=$(cat "$last_file" 2>/dev/null)
-if [ "${last%:*}" = "$src" ]; then
-    dir=$last
-elif [ "$src" = ru ]; then
-    dir=ru:en
-else
-    dir=$src:ru
-fi
-
-dir=$(choose "$dir") && [ -n "$dir" ] || exit 0
-mkdir -p "$config_dir" && echo "$dir" > "$last_file"
-
-while :; do
-    from=${dir%:*} to=${dir#*:}
-    result=$(trans -brief -no-ansi "$dir" "$text" 2>/dev/null)
-    [ -z "$result" ] && result="Ошибка перевода — проверьте подключение к интернету"
-
-    action=$(printf '%s\n\n———\n\n%s\n' "$text" "$result" |
-        zenity --text-info --title="Translateer: ${name[$from]} → ${name[$to]}" --width=600 --height=400 \
-            --ok-label="⇄ Обратный перевод" --extra-button="Другое направление" --cancel-label="Закрыть")
-
-    if [ $? -eq 0 ]; then
-        # Обратный перевод: результат переводим назад на исходный язык
-        text=$result
-        dir=$to:$from
-    elif [ "$action" = "Другое направление" ]; then
-        dir=$(choose "$dir") && [ -n "$dir" ] || exit 0
-        echo "$dir" > "$last_file"
+src=$(detect)
+if [ "$mode" = --choose ] || [ -z "${target[$src]}" ]; then
+    if [ -n "${target[$src]}" ]; then
+        hint="Направление перевода (выбор запомнится):"
     else
-        exit 0
+        hint="Текст ${text_in[$src]}. Куда его переводить?\n\nВыбор запомнится, и дальше такой текст будет переводиться сразу. Изменить направление: кнопка «Другое направление» в окне перевода"
+        label=$(choose_hotkey_label)
+        [ -n "$label" ] && hint+=" или $label"
+        hint+="."
     fi
-done
+    dir=$(choose "$src:${target[$src]:-${default_target[$src]}}" "$hint") && [ -n "$dir" ] || exit 0
+    save_target "$dir"
+else
+    dir=$src:${target[$src]}
+fi
+
+# Окно перевода одно на всех: если оно уже открыто, текст появится в нём,
+# и окно останется на том же месте и того же размера
+window=${0%/*}/translateer-window
+[ -x "$window" ] || window=/usr/libexec/translateer/translateer-window
+exec "$window" "$dir" "$notice" "$text"

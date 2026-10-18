@@ -1,0 +1,199 @@
+#!/usr/bin/python3
+#
+# Окно перевода Translateer. Работает в одном экземпляре: повторный запуск
+# передаёт новый текст уже открытому окну, поэтому окно не прыгает и не
+# меняет размер. Размер запоминается и после закрытия.
+#
+#   translateer-window НАПРАВЛЕНИЕ ПРЕДУПРЕЖДЕНИЕ ТЕКСТ
+#
+# НАПРАВЛЕНИЕ — вида en:ru; ПРЕДУПРЕЖДЕНИЕ может быть пустым.
+
+import os
+import sys
+
+import gi
+
+gi.require_version("Gtk", "4.0")
+gi.require_version("Adw", "1")
+from gi.repository import Adw, Gio, GLib, Gtk  # noqa: E402
+
+NAME = {"ru": "Русский", "en": "English", "uk": "Українська"}
+DIRECTIONS = ["ru:en", "en:ru", "ru:uk", "uk:ru", "en:uk", "uk:en"]
+
+config_dir = os.path.join(os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"), "translateer")
+targets_file = os.path.join(config_dir, "targets")
+size_file = os.path.join(config_dir, "window-size")
+
+
+def write_file(path, text):
+    """Файл заменяется целиком, чтобы не остаться полузаписанным."""
+    os.makedirs(config_dir, exist_ok=True)
+    with open(path + ".tmp", "w") as f:
+        f.write(text)
+    os.replace(path + ".tmp", path)
+
+
+def save_target(direction):
+    """Запоминает направление так же, как save_target в translateer."""
+    target = {}
+    try:
+        with open(targets_file) as f:
+            for line in f:
+                src, _, dst = line.strip().partition("=")
+                if src in NAME and dst in NAME and src != dst:
+                    target[src] = dst
+    except OSError:
+        pass
+    src, dst = direction.split(":")
+    target[src] = dst
+    try:
+        write_file(targets_file, "".join(f"{s}={d}\n" for s, d in target.items()))
+    except OSError:
+        pass
+
+
+def load_size():
+    try:
+        with open(size_file) as f:
+            width, height = (int(n) for n in f.read().split())
+        if width >= 300 and height >= 200:
+            return width, height
+    except (OSError, ValueError):
+        pass
+    return 600, 400
+
+
+class Window(Adw.ApplicationWindow):
+    def __init__(self, app):
+        super().__init__(application=app)
+        self.set_default_size(*load_size())
+        self.request = 0   # номер последнего запроса: устаревшие переводы не показываем
+        self.can_reverse = False
+
+        self.buffer = Gtk.TextBuffer()
+        self.buffer.create_tag("notice", weight=700)
+        view = Gtk.TextView(buffer=self.buffer, editable=False, cursor_visible=False,
+                            wrap_mode=Gtk.WrapMode.WORD_CHAR,
+                            left_margin=12, right_margin=12, top_margin=12, bottom_margin=12)
+        scroll = Gtk.ScrolledWindow(child=view, vexpand=True)
+        scroll.add_css_class("card")
+
+        self.other = Gtk.MenuButton(label="Другое направление", hexpand=True)
+        menu = Gio.Menu()
+        for d in DIRECTIONS:
+            src, dst = d.split(":")
+            menu.append(f"{NAME[src]} → {NAME[dst]}", f"win.direction::{d}")
+        self.other.set_menu_model(menu)
+        action = Gio.SimpleAction.new("direction", GLib.VariantType("s"))
+        action.connect("activate", lambda _a, v: self.change_direction(v.get_string()))
+        self.add_action(action)
+
+        self.main = Gtk.Button(hexpand=True)
+        self.main.add_css_class("suggested-action")
+        self.main.connect("clicked", self.on_main)
+        close = Gtk.Button(label="Закрыть", hexpand=True)
+        close.connect("clicked", lambda _b: self.close())
+
+        buttons = Gtk.Box(spacing=8, homogeneous=True)
+        for b in (self.other, self.main, close):
+            buttons.append(b)
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12,
+                      margin_start=12, margin_end=12, margin_top=6, margin_bottom=12)
+        box.append(scroll)
+        box.append(buttons)
+
+        self.title = Adw.WindowTitle()
+        header = Adw.HeaderBar(title_widget=self.title)
+        toolbar = Adw.ToolbarView(content=box)
+        toolbar.add_top_bar(header)
+        self.set_content(toolbar)
+
+        esc = Gtk.ShortcutController()
+        esc.add_shortcut(Gtk.Shortcut(trigger=Gtk.ShortcutTrigger.parse_string("Escape"),
+                                      action=Gtk.CallbackAction.new(lambda *_: self.close() or True)))
+        self.add_controller(esc)
+        self.connect("close-request", self.on_close)
+
+    def show_text(self, direction, notice, text):
+        self.direction, self.notice, self.text = direction, notice, text
+        self.translate()
+
+    def translate(self):
+        src, dst = self.direction.split(":")
+        self.title.set_title(f"Translateer: {NAME[src]} → {NAME[dst]}")
+        self.render("Перевод…")
+        self.main.set_sensitive(False)
+        self.request += 1
+        request = self.request
+        proc = Gio.Subprocess.new(["trans", "-brief", "-no-ansi", self.direction, self.text],
+                                  Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE)
+        proc.communicate_utf8_async(None, None, self.on_translated, request)
+
+    def on_translated(self, proc, result, request):
+        try:
+            _ok, out, _err = proc.communicate_utf8_finish(result)
+        except GLib.Error:
+            out = ""
+        if request != self.request:
+            return
+        self.result = (out or "").strip()
+        self.can_reverse = bool(self.result)
+        if self.can_reverse:
+            self.main.set_label("⇄ Обратный перевод")
+            self.render(self.result)
+        else:
+            # Сообщение об ошибке переводить обратно бессмысленно — предлагаем повторить
+            self.main.set_label("↻ Повторить")
+            self.render("Ошибка перевода — проверьте подключение к интернету и нажмите «Повторить».")
+        self.main.set_sensitive(True)
+
+    def render(self, result):
+        b = self.buffer
+        b.set_text("")
+        if self.notice:
+            b.insert_with_tags_by_name(b.get_end_iter(), self.notice + "\n\n", "notice")
+        b.insert(b.get_end_iter(), f"{self.text}\n\n———\n\n{result}\n")
+
+    def on_main(self, _button):
+        if self.can_reverse:
+            # Обратный перевод: результат переводим назад на исходный язык; выбор не меняется
+            src, dst = self.direction.split(":")
+            self.show_text(f"{dst}:{src}", "", self.result)
+        else:
+            self.translate()
+
+    def change_direction(self, direction):
+        save_target(direction)
+        self.direction = direction
+        self.translate()
+
+    def on_close(self, _window):
+        try:
+            write_file(size_file, f"{self.get_width()} {self.get_height()}\n")
+        except OSError:
+            pass
+        return False
+
+
+class App(Adw.Application):
+    def __init__(self):
+        super().__init__(application_id="io.github.anrysys.Translateer",
+                         flags=Gio.ApplicationFlags.HANDLES_COMMAND_LINE)
+        self.window = None
+
+    def do_command_line(self, cmdline):
+        args = cmdline.get_arguments()[1:]
+        if len(args) != 3 or args[0] not in DIRECTIONS:
+            cmdline.printerr("Использование: translateer-window НАПРАВЛЕНИЕ ПРЕДУПРЕЖДЕНИЕ ТЕКСТ\n")
+            return 2
+        if self.window is None:
+            self.window = Window(self)
+            self.window.connect("destroy", lambda _w: setattr(self, "window", None))
+        self.window.show_text(*args)
+        self.window.present()
+        return 0
+
+
+if __name__ == "__main__":
+    sys.exit(App().run(sys.argv))

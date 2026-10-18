@@ -54,6 +54,11 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="1.1.1" date="2026-10-18">
+      <description>
+        <p>The translation window comes to the front on every translation instead of staying behind other windows.</p>
+      </description>
+    </release>
     <release version="1.1.0" date="2026-10-18">
       <description>
         <p>The translation direction is asked once for each language of the text and remembered. Ctrl+Alt+Shift+E picks another direction. New translations appear in the window that is already open, keeping its place and size. Long texts are trimmed with a warning, a failed translation can be retried, and Russian text is detected correctly again.</p>

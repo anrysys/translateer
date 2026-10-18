@@ -10,8 +10,17 @@
 
 import os
 import sys
+import warnings
 
-import gi
+# Окно должно выходить поверх всех окон при каждом переводе. Через xdg-activation
+# GNOME поднимает окно только с токеном активации, а горячая клавиша запускает
+# программу без него — и вместо окна показывает «Translateer готов». Без
+# xdg-activation GTK поднимает окно через gtk_surface1.present с отметкой времени
+os.environ["GDK_WAYLAND_DISABLE"] = ",".join(
+    filter(None, [os.environ.get("GDK_WAYLAND_DISABLE"), "xdg_activation_v1"]))
+warnings.filterwarnings("ignore", "Gtk.Window.present_with_time is deprecated", DeprecationWarning)
+
+import gi  # noqa: E402
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
@@ -191,7 +200,9 @@ class App(Adw.Application):
             self.window = Window(self)
             self.window.connect("destroy", lambda _w: setattr(self, "window", None))
         self.window.show_text(*args)
-        self.window.present()
+        # Отметка времени в часах GNOME (монотонные миллисекунды) — позже нажатия
+        # горячей клавиши, поэтому GNOME не считает это кражей фокуса
+        self.window.present_with_time((GLib.get_monotonic_time() // 1000) & 0xFFFFFFFF)
         return 0
 
 

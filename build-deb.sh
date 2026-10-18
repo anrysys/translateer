@@ -3,7 +3,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-version=1.1.0
+version=1.1.1
 root=build/translateer_${version}_all
 share=$root/usr/share
 

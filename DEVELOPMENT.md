@@ -102,6 +102,6 @@ apt-get install -s ./dist/translateer_*_all.deb                       # зави
 
    ```bash
    ./build-deb.sh
-   git commit -am "Translateer 1.2.0" && git tag v1.2.0 && git push --follow-tags
+   git commit -am "Translateer 1.2.0" && git tag -a v1.2.0 -m "Translateer 1.2.0" && git push --follow-tags
    gh release create v1.2.0 dist/translateer_1.2.0_all.deb --title "Translateer 1.2.0" --notes "Что изменилось"
    ```
